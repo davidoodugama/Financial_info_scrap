@@ -1,14 +1,17 @@
 import requests
 import time
-from bs4 import BeautifulSoup
-from selenium.webdriver.chrome.options import Options
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
 import re
-from selenium.webdriver.common.by import By
-from requests_html import HTMLSession
-
+from bs4                               import BeautifulSoup
+from selenium.webdriver.chrome.options import Options
+from selenium                          import webdriver
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome          import ChromeDriverManager
+from selenium.webdriver.common.by      import By
+from requests_html                     import HTMLSession
+from selenium.webdriver.support.ui     import WebDriverWait
+from selenium.webdriver.support        import expected_conditions as EC
+from selenium.common.exceptions        import WebDriverException
+from urllib.parse                      import unquote
 
 options = Options()
 options.add_argument('start-maximized')
@@ -18,6 +21,7 @@ options.headless = True
 options.add_experimental_option("excludeSwitches", ["enable-automation"])
 options.add_experimental_option("detach", True)
 options.add_experimental_option("useAutomationExtension", False)
+driver_path = ChromeDriverManager().install()
 
 # CUSTOM FUNCTIONS
 def parse_price_index(text):
@@ -84,19 +88,78 @@ def get_cse_all_share_technical_analysis(html_page):
     div_element = soup.find('div', class_= 'flex flex-col items-center shrink text-center self-center ml-0 analyst-price-target_gaugeView__yP3BV !w-[300px]').find_all('div')
     return div_element[-1].text
 
+# def clickButton(loadMoreButtons, driver):
+#     try:
+#         time.sleep(2)
+#         loadMoreButtons.click()
+#         time.sleep(5)
+#     except:
+#         pass
+    
+#     return driver.page_source
+
 def clickButton(loadMoreButtons, driver):
     try:
         time.sleep(2)
         loadMoreButtons.click()
-        time.sleep(5)
-    except:
+
+        # Wait for the page to load after the click
+        WebDriverWait(driver, 15).until(
+            EC.staleness_of(loadMoreButtons)
+        )
+    except Exception as e:
         pass
     
     return driver.page_source
 
+def extract_table_info(table_rows, headers):
+    for rows in table_rows:
+        tds                                  = rows.find_all('td')
+        code                                 = tds[1].text
+        product_label                        = tds[2].text
+        imported_value                       = tds[3].text.strip().replace(',', '')
+        trade_balance                        = tds[4].text.strip().replace(',', '')
+        annual_growth_2018_2022              = tds[5].text.strip().replace(',', '')
+        annual_growth_2021_2022              = tds[6].text.strip().replace(',', '')
+        annual_growth_of_world               = tds[7].text.strip().replace(',', '')
+        share_in_world                       = tds[8].text.strip().replace(',', '')
+        ranking_in_world                     = tds[9].text.strip().replace(',', '')
+        average_distance_of_supply_countries = tds[10].text.strip().replace(',', '')
+        concentration_of_supplying_countries = tds[11].text.strip().replace(',', '')
+        average_tariff_applied_by_sri_lanka  = tds[12].text.strip().replace(',', '')
+        print(f"""
+        Code: {code}
+        Product Label: {product_label}
+        {headers[0]}: {imported_value}
+        {headers[1]}: {trade_balance}
+        {headers[2]}: {annual_growth_2018_2022}
+        {headers[3]}: {annual_growth_2021_2022}
+        {headers[4]}: {annual_growth_of_world}
+        {headers[5]}: {share_in_world}
+        {headers[6]}: {ranking_in_world}
+        {headers[7]}: {average_distance_of_supply_countries}
+        {headers[8]}: {concentration_of_supplying_countries}
+        {headers[9]}: {average_tariff_applied_by_sri_lanka}
+        """)
+
+def getElement(driver):
+    
+    div_container = driver.find_element(By.ID, 'div_container')
+    tables        = div_container.find_elements(By.TAG_NAME,'table')
+    target_table  = tables[-4]
+    tbody         = target_table.find_element(By.TAG_NAME,'tbody')
+    tr            = tbody.find_element(By.XPATH,'//tr[@align="right" and @style="color:White;background-color:#86B3E0;font-size:80%;"]')
+    td_table      = tr.find_element(By.TAG_NAME,'td').find_element(By.TAG_NAME,'table')
+    td_tbody      = td_table.find_element(By.TAG_NAME,'tbody')
+    td_tr         = td_tbody.find_element(By.TAG_NAME,'tr')
+    
+    return td_tr
+
+
+# SCRAP SITES
 def x_rates():
     html_page = requests.get("https://www.x-rates.com/table/?from=LKR&amount=1").text
-    soup     = BeautifulSoup(html_page, 'lxml')
+    soup      = BeautifulSoup(html_page, 'lxml')
     
     # TOP 10 
     print(" ----------------------------------------------------------------- Top 10 ------------------------------------------------------------------ ")
@@ -129,8 +192,10 @@ def x_rates():
             """)
 
 def worldbank():
-    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options= options)
-    url    = 'https://data.worldbank.org/indicator/NY.GDP.MKTP.KD.ZG?locations=LK&name_desc=false'
+    global driver_path
+    chrome_service     = Service(executable_path=str(driver_path))
+    driver             = webdriver.Chrome(service=chrome_service, options= options)
+    url                = 'https://data.worldbank.org/indicator/NY.GDP.MKTP.KD.ZG?locations=LK&name_desc=false'
     driver.get(url)
     time.sleep(7)
     
@@ -162,8 +227,10 @@ def worldbank():
             print('')
 
 def tradingeconomics():
-    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options= options)
-    url    = 'https://tradingeconomics.com/sri-lanka/bank-lending-rate'
+    global driver_path
+    chrome_service     = Service(executable_path=str(driver_path))
+    driver             = webdriver.Chrome(service=chrome_service, options= options)
+    url                = 'https://tradingeconomics.com/sri-lanka/bank-lending-rate'
     driver.get(url)
     time.sleep(7)
     
@@ -228,7 +295,7 @@ def cpi_ncpi():
         
     print('')
     print(" ------------------------------------------------------------------------ PREVIOUS YEAR PRICE INDEXES ------------------------------------------------------------------------ ")
-    section = True
+    section    = True
     # PREVIOUS YEAR PRICE INDEXES
     table_rows = tables[1].tbody.find_all('tr')
     for row in table_rows:
@@ -237,8 +304,10 @@ def cpi_ncpi():
         section, year = extract_year_month_wise_price_indexes(row, section, year)
 
 def all_share_index():
-    driver                    = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options= options)
-    url                       = 'https://www.investing.com/indices/cse-all-share'
+    global driver_path
+    chrome_service     = Service(executable_path=str(driver_path))
+    driver             = webdriver.Chrome(service=chrome_service, options= options)
+    url                = 'https://www.investing.com/indices/cse-all-share'
 
     driver.get(url)
     time.sleep(5)
@@ -252,10 +321,9 @@ def all_share_index():
     CSE All Share Value Change  : {instrument_price_change}     
     """)
     
-    invest_details            = soup.find('dl', class_= 'flex-1').find_all('div', class_= 'flex flex-wrap items-center pt-2.5 sm:pb-2.5 justify-between border-t border-t-[#e6e9eb] pb-2.5')
-
     print('')
     print(' ------------------------------------------------------- SUMMARY ------------------------------------------------------- ')
+    invest_details            = soup.find('dl', class_= 'flex-1').find_all('div', class_= 'flex flex-wrap items-center pt-2.5 sm:pb-2.5 justify-between border-t border-t-[#e6e9eb] pb-2.5')
     previous_close            = invest_details[0].find('span', class_='key-info_dd-numeric__ZQFIs').text.replace(',', '')
     open                      = invest_details[1].find('span', class_='key-info_dd-numeric__ZQFIs').text.replace(',', '')
     year_1_change             = invest_details[2].find('span', class_='key-info_dd-numeric__ZQFIs').text
@@ -271,6 +339,7 @@ def all_share_index():
     range1                    = ranges[0].find_all('span')[1].text
     range2                    = ranges[1].find_all('span')[1].text
     wk_52_range               = str(range1) + '-' + str(range2)
+    
     print(f"""
     Previous Close Amount    : {previous_close}
     Open Amount              : {open}
@@ -299,12 +368,14 @@ def all_share_index():
             market_last_value = row[1].text
             change            = row[2].find('span').text
             change_percentage = row[3].find('span').text
+            
         print(f"""
         Market Name       : {market_name}
         Market Last Value : {market_last_value}
         Change            : {change}
         Change Percentage : {change_percentage}
         """)
+
     print('')
     print(' ------------------------------------------------------- ACTIVE STOCKS ------------------------------------------------------- ')
     active_stocks     = soup.find('table', class_= 'w-full text-xs leading-4').find('tbody').find_all('tr', class_= 'hover:bg-[#F5F5F5] relative after:absolute after:bottom-0 after:bg-[#ECEDEF] after:h-px after:left-0 after:right-0')
@@ -368,26 +439,23 @@ def all_share_index():
     print(' ------------------------------------------------------- CSE ALL SHARE TECHNICAL ANALYSIS ------------------------------------------------------- ')
 
     driver.get("https://www.investing.com/indices/cse-all-share-technical")
-    tab_indices = [0, 1, 2]  # Assuming 0 corresponds to DAILY, 1 to WEEKLY, and 2 to MONTHLY
+    tab_indices = [0, 1, 2]
 
     for tab_index in tab_indices:
-        # Click on the corresponding tab
         link    = driver.find_elements(By.CSS_SELECTOR, '[class*="inv-button inv-tab"]')[tab_index]
         driver.execute_script("arguments[0].click();", link)
         
-        # Wait for some time (adjust as needed)
         time.sleep(5)
         
-        # Get the page source
         html_page = driver.page_source
         
-        # Perform analysis based on the tab
         if tab_index   == 0:
             daily_cse_status   = get_cse_all_share_technical_analysis(html_page)
         elif tab_index == 1:
             weekly_cse_status  = get_cse_all_share_technical_analysis(html_page)
         elif tab_index == 2:
             monthly_cse_status = get_cse_all_share_technical_analysis(html_page)
+
     driver.close() 
     print(f"""
     Daily   : {daily_cse_status}
@@ -396,9 +464,10 @@ def all_share_index():
     """)
 
 def no_of_teus():
-    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options= options)
-    # daily = driver
-    url = 'https://www.ceicdata.com/en/indicator/sri-lanka/container-port-throughput'
+    global driver_path
+    chrome_service      = Service(executable_path=str(driver_path))
+    driver              = webdriver.Chrome(service=chrome_service, options= options)
+    url                 = 'https://www.ceicdata.com/en/indicator/sri-lanka/container-port-throughput'
 
     driver.get(url)
     loadMoreButtons = driver.find_elements(By.CLASS_NAME, 'load-more')
@@ -409,6 +478,7 @@ def no_of_teus():
             time.sleep(5)
     except:
         pass
+
     page_source = driver.page_source
     driver.close()
 
@@ -472,9 +542,9 @@ def no_of_teus():
         Frequency        : {container_port_throughput_frequency}
         Range            : {container_port_throughput_range}
         """)
+
     print('')
     print(' --------------------------------------------------------------- SL Key Series --------------------------------------------------------------- ')
-    # tb_rows = soup.find('div', attrs= {'id': 'ipc-table-categories'}).find('table', class_= 'dp-table').tbody.find_all('tr')
     tables  = soup.find('div', attrs= {'id': 'ipc-table-categories'}).find_all('table', class_= 'dp-table')
     tb_rows = tables[0].tbody.find_all('tr')
     for row in tb_rows:
@@ -623,8 +693,6 @@ def tourist_arrivals():
 
     soup       = BeautifulSoup(html_page, 'lxml')
     table_rows = soup.find('div', class_= 'col-xl-10 offset-xl-1 col-lg-12 offset-lg-0 col-md-12 offset-md-0 register-back-wrap short-code-text downloads-table').find('table').tbody.find_all('tr')[1:]
-    # headers = soup.find('div', class_= 'col-xl-10 offset-xl-1 col-lg-12 offset-lg-0 col-md-12 offset-md-0 register-back-wrap short-code-text downloads-table').find('table').tbody.find_all('tr')[0].find_all('td')
-    # header_1 = headers[0].td.text
     for row in table_rows:
         row_details                         = row.find_all('td')
         month                               = row_details[0].text
@@ -640,7 +708,9 @@ def tourist_arrivals():
         """)
 
 def logistics_performance_index():
-    driver                                = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options= options)
+    global driver_path
+    chrome_service                        = Service(executable_path=str(driver_path))
+    driver                                = webdriver.Chrome(service=chrome_service, options= options)
     url                                   = 'https://www.ceicdata.com/en/sri-lanka/transportation/lk-logistics-performance-index-1low-to-5high-ease-of-arranging-competitively-priced-shipments'
     driver.get(url)
     loadMoreButtons                       = driver.find_elements(By.CLASS_NAME, 'load-more')
@@ -851,7 +921,9 @@ def logistics_performance_index():
         """)
 
 def inflation():
-    driver                = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options= options)
+    global driver_path
+    chrome_service        = Service(executable_path=str(driver_path))
+    driver                = webdriver.Chrome(service=chrome_service, options= options)
     url                   = 'https://data.worldbank.org/indicator/FP.CPI.TOTL.ZG?name_desc=false'
 
     driver.get(url)
@@ -876,7 +948,10 @@ def inflation():
         print('')
 
 def futures_prices():
-    driver                    = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options= options)
+    global driver_path
+    chrome_service            = Service(executable_path=str(driver_path))
+    driver                    = webdriver.Chrome(service=chrome_service, options= options)
+    # driver                    = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options= options)
     url                       = 'https://www.investing.com/commodities/real-time-futures'
     driver.get(url)
     page_source_price         = driver.page_source
@@ -1026,4 +1101,60 @@ def futures_prices():
         Volume            : {volume}
         """)
 
-all_share_index()
+def import_data():
+    global driver_path
+    soups               = []
+    pages               = []
+    headers             = []
+    id                  = 1
+    chrome_service      = Service(executable_path=str(driver_path))
+
+    driver              = webdriver.Chrome(service=chrome_service, options= options)
+    url                 = 'https://www.trademap.org/Product_SelProductCountry.aspx?nvpm=1%7c144%7c%7c%7c%7cTOTAL%7c%7c%7c2%7c1%7c1%7c1%7c1%7c1%7c1%7c1%7c1%7c1'
+    decoded_url         = unquote(url)
+    
+    try:
+        driver.get(decoded_url)
+        driver.implicitly_wait(10)
+    except:
+        driver.close()
+        driver = webdriver.Chrome(service=chrome_service, options= options)
+        
+        driver.get(decoded_url)
+        while driver.page_source == None:
+            driver.get(decoded_url)
+            driver.implicitly_wait(10)
+
+    page_source  = driver.page_source
+
+    td_tr = getElement(driver)
+    tds   = td_tr.find_elements(By.TAG_NAME,'td')[1:]
+    
+    for td in tds:
+        try:
+            td.get_attribute("innerHTML")
+            pages.append(BeautifulSoup(clickButton(td, driver), 'lxml'))
+            id += 1
+        except:
+            td_tr = getElement(driver)
+            td_1 = td_tr.find_elements(By.TAG_NAME,'td')[id]
+            pages.append(BeautifulSoup(clickButton(td_1, driver), 'lxml'))
+            id += 1
+
+    # CLOSE DRIVER
+    driver.close()
+    
+    soup       = BeautifulSoup(page_source, 'lxml')
+    table_rows = soup.find('div', attrs= {'id' :'div_container'}).find_all('table')[-4].tbody.find_all('tr', attrs= {"style": "color:White;background-color:#5D7B9D;font-size:80%;font-weight:bold;"})[1].find_all('th')
+    for header in table_rows:
+        headers.append(header.a.text)
+
+    # EXTRACT FIRST PAGE
+    table_rows = soup.find('div', attrs= {'id' :'div_container'}).find_all('table')[-4].tbody.find_all('tr', attrs= {"align": "right"})[2:-1]
+    extract_table_info(table_rows, headers)
+
+    # EXTRACT REST OF THE PAGES
+    for page in pages:
+        table_rows = page.find('div', attrs= {'id' :'div_container'}).find_all('table')[-4].tbody.find_all('tr', attrs= {"align": "right"})[2:-1]
+        extract_table_info(table_rows, headers)
+        

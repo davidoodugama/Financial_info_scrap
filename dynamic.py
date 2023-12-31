@@ -6,7 +6,11 @@ from selenium.webdriver.chrome.options import Options
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 import re
+from selenium.common.exceptions import WebDriverException
+from urllib.parse import unquote
 
 from selenium.webdriver.common.by import By
 
@@ -24,158 +28,108 @@ def clickButton(loadMoreButtons, driver):
     try:
         time.sleep(2)
         loadMoreButtons.click()
-        time.sleep(5)
-    except:
-        pass
+
+        # Wait for the page to load after the click
+        WebDriverWait(driver, 15).until(
+            EC.staleness_of(loadMoreButtons)
+        )
+    except Exception as e:
+        print(f"Error clicking button: {e}")
     
     return driver.page_source
 
-driver                    = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options= options)
-url                       = 'https://www.investing.com/commodities/real-time-futures'
-driver.get(url)
-page_source_price         = driver.page_source
-loadMoreButtons           = driver.find_elements(By.CSS_SELECTOR, ".mobileAndTablet\\:overflow-x-auto.overflow-y-scroll .inv-tab")
+def extract_table_info(table_rows, headers):
+    for rows in table_rows:
+        tds                                  = rows.find_all('td')
+        code                                 = tds[1].text
+        product_label                        = tds[2].text
+        imported_value                       = tds[3].text.strip().replace(',', '')
+        trade_balance                        = tds[4].text.strip().replace(',', '')
+        annual_growth_2018_2022              = tds[5].text.strip().replace(',', '')
+        annual_growth_2021_2022              = tds[6].text.strip().replace(',', '')
+        annual_growth_of_world               = tds[7].text.strip().replace(',', '')
+        share_in_world                       = tds[8].text.strip().replace(',', '')
+        ranking_in_world                     = tds[9].text.strip().replace(',', '')
+        average_distance_of_supply_countries = tds[10].text.strip().replace(',', '')
+        concentration_of_supplying_countries = tds[11].text.strip().replace(',', '')
+        average_tariff_applied_by_sri_lanka  = tds[12].text.strip().replace(',', '')
+        print(f"""
+        Code: {code}
+        Product Label: {product_label}
+        {headers[0]}: {imported_value}
+        {headers[1]}: {trade_balance}
+        {headers[2]}: {annual_growth_2018_2022}
+        {headers[3]}: {annual_growth_2021_2022}
+        {headers[4]}: {annual_growth_of_world}
+        {headers[5]}: {share_in_world}
+        {headers[6]}: {ranking_in_world}
+        {headers[7]}: {average_distance_of_supply_countries}
+        {headers[8]}: {concentration_of_supplying_countries}
+        {headers[9]}: {average_tariff_applied_by_sri_lanka}
+        """)
+    
+driver_path = ChromeDriverManager().install()
+soups = []
+# /root/.wdm/drivers/chromedriver/linux64/120.0.6099.109/chromedriver-linux64/chromedriver
+chrome_service = Service(executable_path=str(driver_path))
 
-page_source_performance   = clickButton(loadMoreButtons[1], driver)
-page_source_technical     = clickButton(loadMoreButtons[2], driver)
-page_source_specification = clickButton(loadMoreButtons[3], driver)
+driver              = webdriver.Chrome(service=chrome_service, options= options)
+url                 = 'https://www.trademap.org/Product_SelProductCountry.aspx?nvpm=1%7c144%7c%7c%7c%7cTOTAL%7c%7c%7c2%7c1%7c1%7c1%7c1%7c1%7c1%7c1%7c1%7c1'
+decoded_url         = unquote(url)
+
+try:
+    driver.get(decoded_url)
+    driver.implicitly_wait(10)
+except:
+    driver.close()
+    driver = webdriver.Chrome(service=chrome_service, options= options)
+    
+    driver.get(decoded_url)
+    while driver.page_source == None:
+        driver.get(decoded_url)
+        driver.implicitly_wait(10)
+
+page_source  = driver.page_source
+pages        = []
+
+def getElement():
+    div_container = driver.find_element(By.ID, 'div_container')
+    tables        = div_container.find_elements(By.TAG_NAME,'table')
+    target_table  = tables[-4]
+    tbody         = target_table.find_element(By.TAG_NAME,'tbody')
+    tr            = tbody.find_element(By.XPATH,'//tr[@align="right" and @style="color:White;background-color:#86B3E0;font-size:80%;"]')
+    td_table      = tr.find_element(By.TAG_NAME,'td').find_element(By.TAG_NAME,'table')
+    td_tbody      = td_table.find_element(By.TAG_NAME,'tbody')
+    td_tr         = td_tbody.find_element(By.TAG_NAME,'tr')
+    
+    return td_tr
+
+td_tr = getElement()
+tds   = td_tr.find_elements(By.TAG_NAME,'td')[1:]
+id    = 1
+for td in tds:
+    try:
+        td.get_attribute("innerHTML")
+        pages.append(BeautifulSoup(clickButton(td, driver), 'lxml'))
+        id += 1
+    except:
+        td_tr = getElement()
+        td_1 = td_tr.find_elements(By.TAG_NAME,'td')[id]
+        pages.append(BeautifulSoup(clickButton(td_1, driver), 'lxml'))
+        id += 1
 
 driver.close()
-soup_price                = BeautifulSoup(page_source_price, 'lxml')
+soup       = BeautifulSoup(page_source, 'lxml')
+table_rows = soup.find('div', attrs= {'id' :'div_container'}).find_all('table')[-4].tbody.find_all('tr', attrs= {"style": "color:White;background-color:#5D7B9D;font-size:80%;font-weight:bold;"})[1].find_all('th')
+headers = []
+for header in table_rows:
+    headers.append(header.a.text)
 
-print(" ---------------------------------------------------------------- Real Time Commodity Futures Prices ---------------------------------------------------------------- ")
-table_rows                = soup_price.find('div', class_= 'relative dynamic-table-v2_dynamic-table-wrapper__fBEvo').find('table').tbody.find_all('tr')
-for row in table_rows:
-    tds                   = row.find_all('td')
-    name                  = tds[1].find('span', class_= 'block text-ellipsis overflow-hidden whitespace-nowrap').text
-    month                 = tds[2].text
-    last                  = tds[3].text
-    high                  = tds[4].text.strip().replace(',', '')
-    low                   = tds[5].text.strip().replace(',', '')
-    change                = tds[6].text.strip().replace(',', '')
-    change_percentage     = tds[7].text.strip().replace(',', '')
-    time_                 = tds[8].find('time').text
-    print(f"""
-    Stock Name        : {name}
-    Month             : {month}
-    Last Value        : {last}
-    High Value        : {high}
-    Low Value         : {low}
-    Change            : {change}
-    Change Percentage : {change_percentage}
-    Time              : {time_}
-    """)
+# EXTRACT FIRST PAGE
+table_rows = soup.find('div', attrs= {'id' :'div_container'}).find_all('table')[-4].tbody.find_all('tr', attrs= {"align": "right"})[2:-1]
+extract_table_info(table_rows, headers)
 
-soup_performance          = BeautifulSoup(page_source_performance, 'lxml')
-
-print(" ---------------------------------------------------------------- Real Time Commodity Futures Performance ---------------------------------------------------------------- ")
-table_rows                = soup_performance.find('div', class_= 'relative dynamic-table-v2_dynamic-table-wrapper__fBEvo').find('table').tbody.find_all('tr')
-for row in table_rows:
-    tds = row.find_all('td')
-    name                  = tds[1].find('span', class_= 'block text-ellipsis overflow-hidden whitespace-nowrap').text
-    daily                 = tds[2].text.strip().replace(',', '')
-    week_1                = tds[3].text.strip().replace(',', '')
-    month_1               = tds[4].text.strip().replace(',', '')
-    ytd                   = tds[5].text.strip().replace(',', '')
-    year_1                = tds[6].text.strip().replace(',', '')
-    year_3                = tds[7].text.strip().replace(',', '')
-    print(f"""
-    Stock Name        : {name}
-    Daily             : {daily}
-    1 Week Value      : {week_1}
-    1 Month Value     : {month_1}
-    YTD               : {ytd}
-    1 Year Value      : {year_1}
-    3 Years Value     : {year_3}
-    """)
-
-soup_technical            = BeautifulSoup(page_source_technical, 'lxml')
-
-print(" ---------------------------------------------------------------- Real Time Commodity Futures Techincal ---------------------------------------------------------------- ")
-table_rows                = soup_technical.find('div', class_= 'relative dynamic-table-v2_dynamic-table-wrapper__fBEvo').find('table').tbody.find_all('tr')
-for row in table_rows:
-    tds = row.find_all('td')
-    name                  = tds[1].find('span', class_= 'block text-ellipsis overflow-hidden whitespace-nowrap').text
-    hourly                = tds[2].text.strip().replace(',', '')
-    daily                 = tds[3].text.strip().replace(',', '')
-    weekly                = tds[4].text.strip().replace(',', '')
-    monthly               = tds[5].text.strip().replace(',', '')
-    print(f"""
-    Stock Name        : {name}
-    Hourly            : {hourly}
-    Daily             : {daily}
-    Weekly            : {weekly}
-    Monthly           : {monthly}
-    """)
-
-soup_specification        = BeautifulSoup(page_source_specification, 'lxml')
-
-print(" ---------------------------------------------------------------- Real Time Commodity Futures Specification ---------------------------------------------------------------- ")
-table_rows                = soup_specification.find('div', class_= 'relative dynamic-table-v2_dynamic-table-wrapper__fBEvo').find('table').tbody.find_all('tr')
-for row in table_rows:
-    tds = row.find_all('td')
-    name                  = tds[1].find('span', class_= 'block text-ellipsis overflow-hidden whitespace-nowrap').text
-    symbol                = tds[2].text.strip().replace(',', '')
-    exchange              = tds[3].text.strip().replace(',', '')
-    contract_size         = tds[4].text.strip().replace(',', '')
-    months                = tds[5].text.strip().replace(',', '')
-    point_value           = tds[6].text.strip().replace(',', '')
-    print(f"""
-    Stock Name        : {name}
-    Symbol            : {symbol}
-    Exchange          : {exchange}
-    Contract Size     : {contract_size}
-    Months            : {months}
-    Point Value       : {point_value}
-    """)
-
-soup                      = BeautifulSoup(page_source_price, 'lxml')
-
-print(" ---------------------------------------------------------------- Market Movers Most Active ---------------------------------------------------------------- ")
-table_rows                = soup.find('div', class_= 'pt-5 md:pt-10 xl:container xl:mx-auto font-sans-v2 antialiased text-[#232526] grid grid-cols-1 md:grid-cols-[1fr_72px] lg:grid-cols-[1fr_420px] px-4 sm:px-6 md:px-7 md:gap-6 lg:px-8 lg:gap-8 flex-1').find('div', class_= 'relative flex flex-col').find('div', class_= 'my-10', attrs={'data-test': 'market-movers'}).tbody.find_all('tr')
-for row in table_rows:
-    tds                   = row.find_all('td')
-    name                  = tds[0].find('a').text
-    last                  = tds[1].text.strip().replace(',', '')
-    change_percentage     = tds[2].text.strip().replace(',', '')
-    volume                = tds[3].text.strip().replace(',', '')
-    print(f"""
-    Market Name       : {name}
-    Last Value        : {last}
-    Change Percentage : {change_percentage}
-    Volume            : {volume}
-    """)
-
-soup                     = BeautifulSoup(page_source_price, 'lxml')
-
-print(" ---------------------------------------------------------------- Market Movers Gainers ---------------------------------------------------------------- ")
-table_rows               = soup.find('div', class_= 'pt-5 md:pt-10 xl:container xl:mx-auto font-sans-v2 antialiased text-[#232526] grid grid-cols-1 md:grid-cols-[1fr_72px] lg:grid-cols-[1fr_420px] px-4 sm:px-6 md:px-7 md:gap-6 lg:px-8 lg:gap-8 flex-1').find('div', class_= 'relative flex flex-col').find('div', class_= 'my-10', attrs={'data-test': 'market-movers'}).find_all('table', class_= 'w-full text-xs leading-4 hidden')[0].tbody.find_all('tr')
-for row in table_rows:
-    tds                  = row.find_all('td')
-    name                 = tds[0].find('a').text
-    last                 = tds[1].text.strip().replace(',', '')
-    change_percentage    = tds[2].text.strip().replace(',', '')
-    volume               = tds[3].text.strip().replace(',', '')
-    print(f"""
-    Market Name       : {name}
-    Last Value        : {last}
-    Change Percentage : {change_percentage}
-    Volume            : {volume}
-    """)
-
-soup                     = BeautifulSoup(page_source_price, 'lxml')
-
-print(" ---------------------------------------------------------------- Market Movers Losers ---------------------------------------------------------------- ")
-table_rows               = soup.find('div', class_= 'pt-5 md:pt-10 xl:container xl:mx-auto font-sans-v2 antialiased text-[#232526] grid grid-cols-1 md:grid-cols-[1fr_72px] lg:grid-cols-[1fr_420px] px-4 sm:px-6 md:px-7 md:gap-6 lg:px-8 lg:gap-8 flex-1').find('div', class_= 'relative flex flex-col').find('div', class_= 'my-10', attrs={'data-test': 'market-movers'}).find_all('table', class_= 'w-full text-xs leading-4 hidden')[1].tbody.find_all('tr')
-for row in table_rows:
-    tds                  = row.find_all('td')
-    name                 = tds[0].find('a').text
-    last                 = tds[1].text.strip().replace(',', '')
-    change_percentage    = tds[2].text.strip().replace(',', '')
-    volume               = tds[3].text.strip().replace(',', '')
-    print(f"""
-    Market Name       : {name}
-    Last Value        : {last}
-    Change Percentage : {change_percentage}
-    Volume            : {volume}
-    """)
+# EXTRACT REST OF THE PAGES
+for page in pages:
+    table_rows = page.find('div', attrs= {'id' :'div_container'}).find_all('table')[-4].tbody.find_all('tr', attrs= {"align": "right"})[2:-1]
+    extract_table_info(table_rows, headers)
