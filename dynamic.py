@@ -38,35 +38,35 @@ def clickButton(loadMoreButtons, driver):
     
     return driver.page_source
 
-def extract_table_info(table_rows, headers):
-    for rows in table_rows:
-        tds                                  = rows.find_all('td')
-        code                                 = tds[1].text
-        product_label                        = tds[2].text
-        imported_value                       = tds[3].text.strip().replace(',', '')
-        trade_balance                        = tds[4].text.strip().replace(',', '')
-        annual_growth_2018_2022              = tds[5].text.strip().replace(',', '')
-        annual_growth_2021_2022              = tds[6].text.strip().replace(',', '')
-        annual_growth_of_world               = tds[7].text.strip().replace(',', '')
-        share_in_world                       = tds[8].text.strip().replace(',', '')
-        ranking_in_world                     = tds[9].text.strip().replace(',', '')
-        average_distance_of_supply_countries = tds[10].text.strip().replace(',', '')
-        concentration_of_supplying_countries = tds[11].text.strip().replace(',', '')
-        average_tariff_applied_by_sri_lanka  = tds[12].text.strip().replace(',', '')
-        print(f"""
-        Code: {code}
-        Product Label: {product_label}
-        {headers[0]}: {imported_value}
-        {headers[1]}: {trade_balance}
-        {headers[2]}: {annual_growth_2018_2022}
-        {headers[3]}: {annual_growth_2021_2022}
-        {headers[4]}: {annual_growth_of_world}
-        {headers[5]}: {share_in_world}
-        {headers[6]}: {ranking_in_world}
-        {headers[7]}: {average_distance_of_supply_countries}
-        {headers[8]}: {concentration_of_supplying_countries}
-        {headers[9]}: {average_tariff_applied_by_sri_lanka}
-        """)
+def extract_table_info(table_rows, headers, type):
+    if type == 'export':
+        for rows in table_rows:
+            tds                                  = rows.find_all('td')
+            code                                 = tds[1].text.strip().replace(',', '')
+            product_label                        = tds[2].text.strip().replace(',', '')
+            export_value                         = tds[3].text.strip().replace(',', '')
+            trade_balance                        = tds[4].text.strip().replace(',', '')
+            annual_growth_1                      = tds[5].text.strip().replace(',', '')
+            annual_growth_2                      = tds[6].text.strip().replace(',', '')
+            annual_growth_of_world               = tds[7].text.strip().replace(',', '')
+            share_in_world                       = tds[8].text.strip().replace(',', '')
+            ranking_in_world                     = tds[9].text.strip().replace(',', '')
+            average_distance_of_supply_countries = tds[10].text.strip().replace(',', '')
+            concentration_of_supplying_countries = tds[11].text.strip().replace(',', '')
+            
+            print(f"""
+            Code: {code}
+            Product Label: {product_label}
+            {headers[0]}: {export_value}
+            {headers[1]}: {trade_balance}
+            {headers[2]}: {annual_growth_1}
+            {headers[3]}: {annual_growth_2}
+            {headers[4]}: {annual_growth_of_world}
+            {headers[5]}: {share_in_world}
+            {headers[6]}: {ranking_in_world}
+            {headers[7]}: {average_distance_of_supply_countries}
+            {headers[8]}: {concentration_of_supplying_countries}
+            """)
     
 driver_path = ChromeDriverManager().install()
 soups = []
@@ -74,7 +74,7 @@ soups = []
 chrome_service = Service(executable_path=str(driver_path))
 
 driver              = webdriver.Chrome(service=chrome_service, options= options)
-url                 = 'https://www.trademap.org/Product_SelProductCountry.aspx?nvpm=1%7c144%7c%7c%7c%7cTOTAL%7c%7c%7c2%7c1%7c1%7c1%7c1%7c1%7c1%7c1%7c1%7c1'
+url                 = 'https://www.trademap.org/Product_SelProductCountry.aspx?nvpm=1%7c144%7c%7c%7c%7cTOTAL%7c%7c%7c2%7c1%7c1%7c2%7c1%7c%7c1%7c1%7c1%7c1'
 decoded_url         = unquote(url)
 
 try:
@@ -127,9 +127,9 @@ for header in table_rows:
 
 # EXTRACT FIRST PAGE
 table_rows = soup.find('div', attrs= {'id' :'div_container'}).find_all('table')[-4].tbody.find_all('tr', attrs= {"align": "right"})[2:-1]
-extract_table_info(table_rows, headers)
+extract_table_info(table_rows, headers, 'export')
 
 # EXTRACT REST OF THE PAGES
 for page in pages:
     table_rows = page.find('div', attrs= {'id' :'div_container'}).find_all('table')[-4].tbody.find_all('tr', attrs= {"align": "right"})[2:-1]
-    extract_table_info(table_rows, headers)
+    extract_table_info(table_rows, headers, 'export')
